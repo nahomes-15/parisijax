@@ -1,231 +1,185 @@
-# ParisiJAX
+# ParisiJax
 
-JAX implementation of the Parisi solution for the Sherrington-Kirkpatrick spin glass model.
+**Differentiable Spin Glass Solvers in JAX**
 
-## Background
+**ParisiJax** is a high-performance, fully differentiable library for solving the **Sherrington-Kirkpatrick (SK)** model. It bridges the gap between the infinite-$N$ theoretical limit (Parisi Formula) and finite-$N$ reality (Monte Carlo simulations).
 
-The Sherrington-Kirkpatrick (SK) model is a mean-field spin glass defined by the Hamiltonian
+By leveraging JAX, this library allows researchers to:
 
-$$H = -\frac{1}{\sqrt{N}} \sum_{i<j} J_{ij} \sigma_i \sigma_j - h \sum_i \sigma_i$$
+1. **Solve the Parisi PDE** numerically via auto-differentiable $k$-step Replica Symmetry Breaking ($k$-RSB).
+2. **Optimize thermodynamic quantities** (like Free Energy) via gradient descent on the functional order parameter $q(x)$.
+3. **Simulate massive systems** ($N \sim 10^3$) on GPUs using `vmap`-accelerated MCMC.
 
-where $\sigma_i \in \\{-1, +1\\}$ are Ising spins and $J_{ij}$ are independent Gaussian random variables with $\mathbb{E}[J_{ij}] = 0$ and $\mathrm{Var}(J_{ij}) = 1/N$. The $1/\sqrt{N}$ normalization ensures an extensive free energy in the thermodynamic limit.
+---
 
-The model exhibits a continuous phase transition at the Almeida-Thouless (AT) line, approximately $T_c \approx 1.0$ (in units where $k_B = 1$), below which the replica-symmetric (RS) solution becomes unstable. Parisi (1980) showed that the correct low-temperature solution requires **replica symmetry breaking (RSB)**: an infinite hierarchy of ultrametric pure states characterized by a non-trivial overlap distribution $P(q)$.
+## 1. The Mathematical Theory
 
-### The Replica Method
+### The Hamiltonian
 
-The quenched free energy $f = -\beta^{-1} \mathbb{E}_J[\log Z]$ is computed via the replica trick:
+The SK model describes $N$ Ising spins $\sigma_i \in \{\pm 1\}$ with quenched Gaussian disorder:
 
-$$f = -\lim_{n \to 0} \frac{\partial}{\partial n} \mathbb{E}_J[Z^n]$$
+$$
+H = -\frac{1}{\sqrt{N}} \sum_{i<j} J_{ij} \sigma_i \sigma_j - h \sum_i \sigma_i
+$$
 
-The order parameter is the **overlap matrix** $q_{\alpha\beta} = N^{-1} \sum_i \sigma_i^{(\alpha)} \sigma_i^{(\beta)}$ between replicas $\alpha, \beta \in \\{1, \ldots, n\\}$. The RS ansatz assumes $q_{\alpha\beta} = q$ for all $\alpha \neq \beta$, which yields
+where $J_{ij} \sim \mathcal{N}(0, 1)$ are i.i.d. random couplings.
 
-$$f_{\mathrm{RS}} = -\frac{\beta}{4} - \frac{1}{\beta} \int \mathcal{D}z \log 2\cosh\beta(h + z)$$
+### The Parisi Variational Formula
 
-where $\mathcal{D}z = (2\pi)^{-1/2} e^{-z^2/2} dz$ is the Gaussian measure. This solution is valid for $T > T_c$ but violates the AT stability condition $\beta^2(1 - q^2) \geq 1$ at low temperatures.
+In the thermodynamic limit ($N \to \infty$), the quenched free energy density converges to the **Parisi Formula**:
 
-### Parisi's Solution
+$$
+f = \inf_{q(x)} \Phi[q(x)]
+$$
 
-Parisi introduced a functional order parameter $q(x)$ for $x \in [0,1]$ describing the hierarchical structure of pure states. The RSB free energy functional is given by the **Parisi PDE**:
+where the functional $\Phi$ is defined by the solution to a nonlinear partial differential equation (PDE). Let $q(x): [0,1] \to [0, q_{\max}]$ be a non-decreasing function (the order parameter).
 
-$$\Phi_r(y) = \frac{1}{m_r} \log \int \mathcal{D}z \, \exp\left[m_r \Phi_{r+1}\left(y + \sqrt{\Delta q_r} \, z\right)\right]$$
+We define the function $\Phi(x, y)$ on $x \in [0,1], y \in \mathbb{R}$ as the solution to the **Parisi Backward PDE**:
 
-solved backward from $\Phi_k(y) = \log 2\cosh(\beta y)$ with $\Delta q_r = q_{r+1} - q_r$ and $m_r$ the replica indices. The free energy is
+$$
+\frac{\partial \Phi}{\partial x} = \frac{1}{2} q'(x) \frac{\partial^2 \Phi}{\partial y^2}
+$$
 
-$$f = -\frac{\beta(1 - q_k)}{4} - \frac{\beta}{4}\sum_r (m_{r+1} - m_r) q_r + \frac{\Phi_0(h)}{\beta}$$
+with the terminal condition at $x=1$:
 
-In the continuous limit ($k \to \infty$), this becomes the Parisi functional with a continuous function $x(q)$, but numerical work typically uses finite $k$-RSB.
+$$
+\Phi(1, y) = \log 2 \cosh(\beta y)
+$$
 
-### Edwards-Anderson Order Parameter
+The free energy is then given by:
 
-The spin glass phase is characterized by a nonzero **Edwards-Anderson parameter**
+$$
+f = -\frac{\beta q_{\max}}{4} + \frac{1}{\beta} \Phi(0, h)
+$$
 
-$$q_{\mathrm{EA}} = \lim_{t \to \infty} \mathbb{E}\left[\left(\frac{1}{N}\sum_i \sigma_i(t) \sigma_i(0)\right)^2\right] = \int q^2 P(q) \, dq$$
+### The $k$-RSB Approximation
 
-which measures the self-overlap of the system. At high temperature ($T > T_c$), $q_{\mathrm{EA}} = 0$ and $P(q) = \delta(q)$. Below $T_c$, the distribution becomes non-trivial, reflecting the emergence of many metastable states with varying overlaps.
+Numerically, we cannot solve for a continuous $q(x)$ directly. Instead, we approximate $q(x)$ as a step function with $k$ steps. This discretizes the PDE into a recursive integral equation.
 
-## Implementation
+Let $q_0 = 0 < q_1 < \cdots < q_k$ be the values of $q$ in each interval $[x_r, x_{r+1}]$. The PDE becomes a sequence of Gaussian convolutions:
 
-This package provides:
+$$
+\Phi_r(y) = \frac{1}{m_r} \log \int \mathcal{D}z \, \exp\left[ m_r \Phi_{r+1}(y + \sqrt{\Delta q_r} z) \right]
+$$
 
-1. **Analytical solutions**: Replica-symmetric, 1-step RSB, and full $k$-RSB free energies via Gaussian quadrature and backward recursion.
-2. **Monte Carlo sampling**: GPU-accelerated Metropolis and Gibbs samplers with automatic vectorization over disorder realizations and temperature replicas.
-3. **Parallel tempering**: Enhanced equilibration for the spin glass phase via replica exchange.
-4. **Overlap analysis**: Numerical computation of $P(q)$ and $q_{\mathrm{EA}}$ from equilibrium configurations.
+ParisiJax implements this recursion using `jax.lax.scan` and differentiable Gaussian quadrature, allowing gradients to flow back to the parameters $\{q_r, m_r\}$.
 
-All numerics use JAX for automatic differentiation, JIT compilation, and GPU execution.
+---
 
-## Installation
+## 2. Installation
 
 ```bash
-pip install jax jaxlib optax matplotlib numpy
-git clone https://github.com/nahomes-15/parisijax
-cd parisijax
-pip install -e .
+pip install parisijax
 ```
 
-For GPU support:
-```bash
-pip install jax[cuda12] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-```
+**Requirements:** `jax`, `jaxlib`, `optax`, `numpy`, `scipy`.
+*Note: For GPU acceleration, ensure you have the correct CUDA-enabled JAX version installed.*
 
-## Usage
+---
 
-### Basic example
+## 3. Usage: The Differentiable Solver
+
+We can find the stable solution by minimizing the free energy with respect to the order parameters. Unlike traditional analytical derivations (which are painful for $k > 1$), we use **gradient descent**.
 
 ```python
 import jax
 import jax.numpy as jnp
-from parisijax.core import hamiltonian, mcmc, solver
-from parisijax.analysis import overlap
+from parisijax.core import solver
 
-# Generate disorder realization
-key = jax.random.PRNGKey(42)
-n_spins = 500
-J = hamiltonian.sample_couplings(key, n_spins, n_samples=1)[0]
+# 1. Initialize parameters for 10-step RSB
+beta = 2.0  # Low temperature (Spin Glass Phase)
+k_steps = 10
+key = jax.random.PRNGKey(0)
 
-# Compute RS free energy
+# 2. Optimize the Parisi Functional
+# This automatically discovers the shape of x(q)
+params, free_energy, history = solver.optimize_parisi_structure(
+    key,
+    beta=beta,
+    h=0.0,
+    k=k_steps,
+    learning_rate=1e-3,
+    n_iters=5000
+)
+
+# 3. Extract the Order Parameter x(q)
+q_grid = params['q']  # The overlap values
+x_grid = params['m']  # The cumulative probability
+# Plotting (q_grid, x_grid) reveals the phase transition structure.
+```
+
+### Why is this "Differentiable"?
+
+Because the solver is pure JAX, you can differentiate the free energy with respect to physical parameters. For example, to compute the **Internal Energy** $U = \partial(\beta f)/\partial \beta$:
+
+```python
+def compute_internal_energy(beta, h, params):
+    # Differentiate the solver solution w.r.t beta
+    f_fn = lambda b: solver.parisi_free_energy(params['q'], params['m'], b, h)
+    return jax.grad(f_fn)(beta)
+```
+
+---
+
+## 4. Usage: GPU-Accelerated MCMC
+
+To verify theoretical predictions, we simulate finite-$N$ instances. `ParisiJax` uses `jax.vmap` to simulate thousands of replicas in parallel on a single GPU.
+
+```python
+from parisijax.core import mcmc, hamiltonian
+
+N = 1000
+n_replicas = 4096  # Massive parallelization
 beta = 1.5
-f_rs = solver.rs_free_energy(beta)
 
-# Find AT critical temperature
-beta_c = solver.find_critical_temperature()  # ≈ 1.1
-
-# Run MCMC at low temperature
+# 1. Generate Couplings (J_ij)
 key, subkey = jax.random.split(key)
-beta_low = 2.0
-final_spins, energy_traj = mcmc.run_mcmc(
-    subkey, J, beta_low, n_steps=10000, n_samples=500
+J = hamiltonian.generate_sk_couplings(subkey, N)
+
+# 2. Run Parallel Tempering or Metropolis
+# Returns spins for all 4096 replicas
+final_spins = mcmc.run_parallel_chains(
+    key,
+    J,
+    beta=beta,
+    n_steps=10_000,
+    batch_size=n_replicas
 )
 
-# Sample overlap distribution
-key, subkey = jax.random.split(key)
-overlaps = overlap.sample_overlap_distribution(
-    subkey, J, beta_low, n_samples=200, n_steps=5000, burnin=1000
-)
-
-# Compute Edwards-Anderson parameter
-q_ea = overlap.compute_edwards_anderson_parameter(overlaps)
-print(f"q_EA = {q_ea:.4f}")
+# 3. Compute Overlap Distribution P(q)
+# We compute q between pairs of replicas
+q_overlaps = mcmc.compute_overlaps(final_spins)
 ```
 
-### Parisi solution
+---
 
-```python
-# Optimize k-RSB free energy
-q_opt, m_opt, f_parisi, history = solver.optimize_parisi(
-    beta=1.5, k=10, n_steps=1000, learning_rate=0.01
-)
+## 5. Implementation Details
 
-print(f"Parisi free energy: {f_parisi:.6f}")
-print(f"Overlap breaks: {q_opt}")
-```
+### Numerical Stability via Log-Sum-Exp
 
-### Parallel tempering for deep equilibration
+The core recursion involves terms like $\log \sum_i \exp(m_r \Phi_i)$. Naive implementation leads to overflows at low temperatures ($\beta > 2$). We utilize the **Log-Sum-Exp** trick stabilized by the maximum value in the Gaussian integral kernel:
 
-```python
-from parisijax.core.mcmc import parallel_tempering_step
-from parisijax.core.hamiltonian import random_spins
+$$
+\log \sum_i w_i e^{m_r \Phi_i} = m_{\max} + \log \sum_i w_i e^{m_r (\Phi_i - \Phi_{\max})}
+$$
 
-# Temperature ladder
-n_temps = 16
-betas = jnp.geomspace(0.2, 2.0, n_temps)
+### The De Almeida-Thouless (AT) Condition
 
-# Initialize
-key, subkey = jax.random.split(key)
-spins_all_temps = random_spins(subkey, n_spins, n_samples=n_temps)
+The library includes a utility to check the stability of the Replica Symmetric (RS) solution. The RS solution is stable only if:
 
-# Run PT
-for step in range(50000):
-    key, subkey = jax.random.split(key)
-    spins_all_temps = parallel_tempering_step(subkey, spins_all_temps, J, betas)
+$$
+\beta^2 (1 - q^2) \leq 1
+$$
 
-# Extract samples from target temperature
-coldest_samples = spins_all_temps[-1]
-```
+If this condition is violated (The AT line), the solver automatically switches to RSB mode.
 
-## API Reference
-
-### `parisijax.core.hamiltonian`
-
-- **`sample_couplings(key, n_spins, n_samples=1)`**: Generate $J_{ij} \sim \mathcal{N}(0, 1/N)$ with symmetric structure and zero diagonal.
-- **`sk_energy(spins, J, h=0.0)`**: Compute $H$ for given spin configurations (vmappable).
-- **`random_spins(key, n_spins, n_samples=1)`**: Sample initial configurations from uniform distribution over $\\{\pm 1\\}^N$.
-
-### `parisijax.core.solver`
-
-- **`rs_free_energy(beta, h=0.0, n_quad=32)`**: Replica-symmetric free energy via Gauss-Hermite quadrature.
-- **`find_critical_temperature(beta_min=0.1, beta_max=2.0, tol=1e-4)`**: Locate AT instability line via binary search on $\beta^2(1 - q^2) = 1$.
-- **`one_rsb_free_energy(q0, q1, m, beta, h=0.0, n_quad=32)`**: 1-step RSB solution with nested quadrature.
-- **`parisi_free_energy(q_raw, m_raw, beta, h=0.0, n_quad=32, n_grid=200)`**: Full $k$-RSB via backward PDE recursion with interpolation on discretized $x$-grid.
-- **`optimize_parisi(beta, h=0.0, k=10, n_steps=1000, lr=0.01)`**: Minimize $-f$ via Adam to find optimal $\\{q_r, m_r\\}$.
-
-### `parisijax.core.mcmc`
-
-- **`run_mcmc(key, J, beta, h=0.0, n_steps=1000, n_samples=1000, method='metropolis')`**: Vectorized MCMC with independent replicas. Returns `(final_spins, energy_trajectory)`.
-- **`parallel_tempering_step(key, spins_all_temps, J, betas, h=0.0)`**: Single PT sweep with Metropolis updates and replica exchange moves.
-
-### `parisijax.analysis.overlap`
-
-- **`compute_overlap(spins1, spins2)`**: Compute $q = N^{-1} \sum_i \sigma_i^{(1)} \sigma_i^{(2)}$ (vmappable).
-- **`sample_overlap_distribution(key, J, beta, n_samples=1000, n_steps=5000, burnin=1000)`**: Estimate $P(q)$ by running $2n$ independent chains and computing pairwise overlaps.
-- **`compute_edwards_anderson_parameter(overlaps)`**: Compute $q_{\mathrm{EA}} = \langle q^2 \rangle$.
-- **`theoretical_overlap_distribution(q_parisi, m_parisi)`**: Compute $P(q)$ from Parisi solution (piecewise constant with jumps at $q_r$).
-
-## Numerical Details
-
-### Quadrature
-
-Gaussian expectations are evaluated using $n$-point Gauss-Hermite quadrature:
-
-$$\int \mathcal{D}z \, f(z) \approx \sum_{i=1}^n w_i f(z_i)$$
-
-where $\\{z_i, w_i\\}$ are nodes and weights for the standard Hermite polynomial basis. Default: $n = 32$.
-
-### Parisi Recursion
-
-The backward PDE is solved on a discrete grid $x \in [-10, 10]$ with linear interpolation. The recursion uses `jax.lax.scan` for efficiency and automatic differentiation through the entire computation graph.
-
-### MCMC Equilibration
-
-At low temperature ($\beta > 2$), simple Metropolis dynamics exhibits critical slowing down with autocorrelation time $\tau \sim \exp(c\beta)$. Parallel tempering with a geometric temperature ladder mitigates this by allowing configurations to diffuse through temperature space. Typical parameters:
-
-- High T ($\beta \sim 0.5$): 2000 steps sufficient
-- Low T ($\beta \sim 2.0$): 50,000+ PT steps recommended
-
-## Performance
-
-Benchmarks on Apple M1 (CPU mode):
-
-- RS free energy: ~4 ms per temperature
-- MCMC (N=500, 500 replicas, 2000 steps): 1.0 s (1M spin-flips/sec)
-- Overlap sampling (200 pairs, 5000 steps): 2.5 s
-
-Expected GPU performance (A100): 50-200M spin-flips/sec.
+---
 
 ## References
 
-**Theory:**
-
-- Sherrington, D., & Kirkpatrick, S. (1975). Solvable model of a spin-glass. *Physical Review Letters*, 35(26), 1792.
-- Parisi, G. (1980). A sequence of approximated solutions to the S-K model for spin glasses. *Journal of Physics A: Mathematical and General*, 13(4), L115.
-- Mézard, M., Parisi, G., & Virasoro, M. A. (1987). *Spin glass theory and beyond*. World Scientific.
-
-**Numerical methods:**
-
-- Marinari, E., & Parisi, G. (1992). Simulated tempering: a new Monte Carlo scheme. *EPL (Europhysics Letters)*, 19(6), 451.
-- Newman, M. E. J., & Barkema, G. T. (1999). *Monte Carlo methods in statistical physics*. Oxford University Press.
-
-## Citation
-
-```bibtex
-@software{parisijax2025,
-  author = {Nahom Seyoum},
-  title = {ParisiJAX: JAX Implementation of Parisi Solution for Spin Glasses},
-  year = {2025},
-  url = {https://github.com/nahomes-15/parisijax}
-}
-```
+1. **Parisi, G.** (1980). *A sequence of approximate solutions to the S-K model for spin glasses*. J. Phys. A.
+2. **Talagrand, M.** (2006). *The Parisi Formula*. Annals of Mathematics. (The rigorous proof).
+3. **Mezard, M., Parisi, G., & Virasoro, M.** (1987). *Spin Glass Theory and Beyond*. World Scientific.
 
 ## License
 
