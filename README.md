@@ -3,67 +3,188 @@
 
 [![JAX](https://img.shields.io/badge/JAX-Powered-blue.svg)](https://github.com/google/jax)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Physics](https://img.shields.io/badge/Statistical-Physics-purple)](https://arxiv.org/abs/cond-mat/0000000)
+[![Python](https://img.shields.io/badge/Python-3.9+-green.svg)](https://python.org)
 
 **ParisiJax** is a high-performance, fully differentiable library for solving the **Sherrington-Kirkpatrick (SK)** model and other mean-field spin glasses. It bridges the gap between the infinite-*N* theoretical limit (Parisi Formula) and finite-*N* reality (Monte Carlo simulations).
 
 By leveraging JAX, this library allows researchers to:
-1.  **Solve the Parisi PDE** numerically via auto-differentiable *k*-step Replica Symmetry Breaking (*k*-RSB).
-2.  **Optimize thermodynamic quantities** (like Free Energy) via gradient descent on the functional order parameter *x(q)*.
-3.  **Simulate massive systems** (*N* > 10,000) on GPUs using `vmap`-accelerated MCMC.
+1. **Solve the Parisi PDE** numerically via auto-differentiable *k*-step Replica Symmetry Breaking (*k*-RSB).
+2. 2. **Optimize thermodynamic quantities** (like Free Energy) via gradient descent on the functional order parameter *x(q)*.
+   3. 3. **Simulate massive systems** (*N* > 10,000) on GPUs using `vmap`-accelerated MCMC.
+     
+      4. ---
+     
+      5. ## Installation
+     
+      6. ```bash
+         pip install parisijax
+         ```
 
----
+         Or install from source:
 
-## 1. The Mathematical Theory
+         ```bash
+         git clone https://github.com/nahomes-15/parisijax.git
+         cd parisijax
+         pip install -e .
+         ```
 
-### The Hamiltonian
-The SK model describes *N* Ising spins $\sigma_i \in \{-1, 1\}$ with quenched Gaussian disorder:
+         ### Dependencies
+         - JAX >= 0.4.0
+         - - NumPy >= 1.20
+           - - SciPy >= 1.7
+            
+             - ---
 
-$$
-H_N(\boldsymbol{\sigma}) = -\frac{1}{\sqrt{N}} \sum_{1 \leq i < j \leq N} J_{ij} \sigma_i \sigma_j - h \sum_{i=1}^N \sigma_i
-$$
+             ## Quick Start
 
-where $J_{ij} \sim \mathcal{N}(0, 1)$ are i.i.d. random couplings.
+             ### Computing Free Energy with Replica Symmetry (RS)
 
-### The Parisi Variational Formula
-In the thermodynamic limit (*N* → ∞), the quenched free energy density converges to the **Parisi Formula**:
+             ```python
+             import jax.numpy as jnp
+             from parisijax.core.solver import SKSolver
 
-$$
-f(\beta, h) = \inf_{x \in \mathcal{X}} \mathcal{P}[x]
-$$
+             # Create solver at inverse temperature beta=1.0
+             solver = SKSolver(beta=1.0, h=0.0)
 
-where the functional $\mathcal{P}[x]$ is defined by the solution to a nonlinear partial differential equation (PDE). Let *x* : [0, 1] → [0, 1] be a non-decreasing function (the order parameter). We define the function $\Phi(q, y)$ on $[0, 1] \times \mathbb{R}$ as the solution to the **Parisi Backward PDE**:
+             # Compute RS free energy
+             f_rs = solver.rs_free_energy()
+             print(f"RS Free Energy: {f_rs:.6f}")
 
-$$
-\frac{\partial \Phi}{\partial q} + \frac{1}{2} \frac{\partial^2 \Phi}{\partial y^2} + \frac{1}{2} x(q) \left( \frac{\partial \Phi}{\partial y} \right)^2 = 0
-$$
+             # Check AT stability (is RS solution stable?)
+             is_stable = solver.at_stability()
+             print(f"AT Stable: {is_stable}")
+             ```
 
-with the terminal condition at *q* = 1:
+             ### 1-RSB Free Energy
 
-$$
-\Phi(1, y) = \log \cosh (\beta y)
-$$
+             ```python
+             # For beta > 1, RS becomes unstable. Use 1RSB:
+             solver = SKSolver(beta=1.5, h=0.0)
 
-The free energy is then given by:
+             # Compute 1RSB free energy with breakpoint parameters
+             # q1: first overlap, m: Parisi parameter
+             f_1rsb = solver.one_rsb_free_energy(q1=0.5, m=0.7)
+             print(f"1RSB Free Energy: {f_1rsb:.6f}")
+             ```
 
-$$
-\mathcal{P}[x] = -\frac{\beta}{4} \left( 1 - \int_0^1 x(q) \, dq \right) - \frac{1}{\beta} \Phi(0, h)
-$$
+             ### MCMC Simulation
 
-### The k-RSB Approximation
-Numerically, we cannot solve for a continuous *x(q)* directly. Instead, we approximate *x(q)* as a step function with *k* steps. This discretizes the PDE into a recursive integral equation.
+             ```python
+             import jax
+             from parisijax.core.mcmc import SKModel
 
-Let $0 = m_0 < m_1 < \dots < m_k = 1$ be the values of *x(q)* in each interval $[q_i, q_{i+1}]$. The PDE becomes a sequence of Gaussian convolutions:
+             # Create SK model with N=1000 spins
+             key = jax.random.PRNGKey(42)
+             model = SKModel(N=1000, beta=1.0, h=0.0, key=key)
 
-$$
-f_i(y) = \frac{1}{m_i} \log \int_{\mathbb{R}} \mathcal{D}z \, \exp\left( m_i f_{i+1}\left( y + z\sqrt{q_{i+1} - q_i} \right) \right)
-$$
+             # Run parallel tempering MCMC
+             samples, energies = model.sample(
+                 n_samples=10000,
+                 n_chains=4,
+                 warmup=1000
+             )
 
-ParisiJax implements this recursion using `jax.lax.scan` and differentiable Gaussian quadrature, allowing gradients to flow back to the parameters $\{m_i, q_i\}$.
+             # Compute overlap distribution
+             from parisijax.core.mcmc import overlap_distribution
+             q_values, p_q = overlap_distribution(samples)
+             ```
 
----
+             ---
 
-## 2. Installation
+             ## The Mathematical Theory
 
-```bash
-pip install parisijax
+             ### The Hamiltonian
+             The SK model describes *N* Ising spins with quenched Gaussian disorder:
+
+             $$
+             H_N(\boldsymbol{\sigma}) = -\frac{1}{\sqrt{N}} \sum_{1 \leq i < j \leq N} J_{ij} \sigma_i \sigma_j - h \sum_{i=1}^N \sigma_i
+             $$
+
+             where the couplings are i.i.d. standard normal random variables.
+
+             ### The Parisi Variational Formula
+             In the thermodynamic limit (*N* → ∞), the quenched free energy density converges to the **Parisi Formula**:
+
+             $$
+             f(\beta, h) = \inf_{x \in \mathcal{X}} \mathcal{P}[x]
+             $$
+
+             where the functional is defined by the solution to the **Parisi Backward PDE**:
+
+             $$
+             \frac{\partial \Phi}{\partial q} + \frac{1}{2} \frac{\partial^2 \Phi}{\partial y^2} + \frac{1}{2} x(q) \left( \frac{\partial \Phi}{\partial y} \right)^2 = 0
+             $$
+
+             with terminal condition at *q* = 1:
+
+             $$
+             \Phi(1, y) = \log \cosh (\beta y)
+             $$
+
+             ### The k-RSB Approximation
+             Numerically, we approximate *x(q)* as a step function with *k* steps. ParisiJax implements this recursion using `jax.lax.scan` and differentiable Gaussian quadrature.
+
+             ---
+
+             ## API Reference
+
+             ### `SKSolver`
+
+             | Method | Description |
+             |--------|-------------|
+             | `rs_free_energy()` | Replica Symmetric free energy |
+             | `at_stability()` | de Almeida-Thouless stability check |
+             | `one_rsb_free_energy(q1, m)` | 1-RSB free energy |
+             | `ground_state_energy()` | T→0 ground state energy |
+             | `high_temp_free_energy()` | High temperature (β→0) limit |
+
+             ### `SKModel`
+
+             | Method | Description |
+             |--------|-------------|
+             | `sample(n_samples, n_chains, warmup)` | Run MCMC sampling |
+             | `energy(spins)` | Compute energy of configuration |
+
+             ### Utility Functions
+
+             | Function | Description |
+             |----------|-------------|
+             | `compute_overlap(s1, s2)` | Overlap between two configurations |
+             | `overlap_distribution(samples)` | P(q) from MCMC samples |
+
+             ---
+
+             ## Known Theoretical Results
+
+             The implementation validates against known analytical results:
+
+             | Quantity | Value | Reference |
+             |----------|-------|-----------|
+             | Ground state energy | -0.7633... | Parisi (1980) |
+             | Critical temperature | β_c = 1 | SK (1975) |
+             | RS free energy (β=1, h=0) | -0.75 | Exact |
+
+             ---
+
+             ## Citation
+
+             If you use ParisiJax in your research, please cite:
+
+             ```bibtex
+             @software{parisijax2024,
+               title={ParisiJax: Differentiable Spin Glass Solvers in JAX},
+               author={nahomes-15},
+               year={2024},
+               url={https://github.com/nahomes-15/parisijax}
+             }
+             ```
+
+             ---
+
+             ## License
+
+             MIT License - see [LICENSE](LICENSE) for details.
+
+             ## Contributing
+
+             Contributions are welcome! Please feel free to submit a Pull Request.
