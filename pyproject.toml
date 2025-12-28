@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_system"
+
+[project]
+name = "parisijax"
+version = "0.1.0"
+description = "JAX implementation of the Parisi RSB solution for spin glasses"
+requires-python = ">=3.10"
+dependencies = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0",
+    "optax>=0.1.7",
+    "matplotlib>=3.5.0",
+    "numpy>=1.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "jupyter>=1.0.0",
+]

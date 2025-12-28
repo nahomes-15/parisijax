@@ -1,0 +1,1 @@
+"""Finite-size scaling analysis."""
