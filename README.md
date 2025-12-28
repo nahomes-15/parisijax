@@ -18,9 +18,11 @@ By leveraging JAX, this library allows researchers to:
 
 ### The Hamiltonian
 The SK model describes $N$ Ising spins $\sigma_i \in \{-1, 1\}$ with quenched Gaussian disorder:
+
 $$
 H_N(\boldsymbol{\sigma}) = -\frac{1}{\sqrt{N}} \sum_{1 \leq i < j \leq N} J_{ij} \sigma_i \sigma_j - h \sum_{i=1}^N \sigma_i
 $$
+
 where $J_{ij} \sim \mathcal{N}(0, 1)$ are i.i.d. random couplings.
 
 ### The Parisi Variational Formula
@@ -37,10 +39,16 @@ $$
 $$
 
 with the terminal condition at $q=1$:
-$$\Phi(1, y) = \log \cosh (\beta y)$$
+
+$$
+\Phi(1, y) = \log \cosh (\beta y)
+$$
 
 The free energy is then given by:
-$$\mathcal{P}[x] = -\frac{\beta}{4} \left( 1 - \int_0^1 x(q) \, dq \right) - \frac{1}{\beta} \Phi(0, h)$$
+
+$$
+\mathcal{P}[x] = -\frac{\beta}{4} \left( 1 - \int_0^1 x(q) \, dq \right) - \frac{1}{\beta} \Phi(0, h)
+$$
 
 ### The $k$-RSB Approximation
 Numerically, we cannot solve for a continuous $x(q)$ directly. Instead, we approximate $x(q)$ as a step function with $k$ steps. This discretizes the PDE into a recursive integral equation.
