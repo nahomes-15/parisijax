@@ -10,17 +10,25 @@ from jax.typing import ArrayLike
 
 @partial(jit, static_argnums=(1, 2))
 def sample_couplings(key: ArrayLike, n_spins: int, n_samples: int = 1) -> jnp.ndarray:
-    """Generate symmetric SK coupling matrices with J_ij ~ N(0, 1/N).
+    """Generate symmetric SK coupling matrices with J_ij ~ N(0, 1).
 
     Args:
         key: PRNG key
-        n_spins: System size N
-        n_samples: Number of disorder realizations
+        n_spins: System size N (must be > 0)
+        n_samples: Number of disorder realizations (must be > 0)
 
     Returns:
         Couplings J of shape (n_samples, n_spins, n_spins), symmetric with zero diagonal
+
+    Raises:
+        ValueError: If n_spins <= 0 or n_samples <= 0
     """
-    J = random.normal(key, (n_samples, n_spins, n_spins)) / jnp.sqrt(n_spins)
+    if n_spins <= 0:
+        raise ValueError(f"n_spins must be positive, got {n_spins}")
+    if n_samples <= 0:
+        raise ValueError(f"n_samples must be positive, got {n_samples}")
+
+    J = random.normal(key, (n_samples, n_spins, n_spins))
     J = (J + jnp.swapaxes(J, -2, -1)) * 0.5  # Symmetrize
     return jnp.where(jnp.eye(n_spins, dtype=bool), 0.0, J)  # Zero diagonal
 
@@ -51,10 +59,18 @@ def random_spins(key: ArrayLike, n_spins: int, n_samples: int = 1) -> jnp.ndarra
 
     Args:
         key: PRNG key
-        n_spins: System size
-        n_samples: Number of configurations
+        n_spins: System size (must be > 0)
+        n_samples: Number of configurations (must be > 0)
 
     Returns:
         Spins of shape (n_samples, n_spins) with values in {-1, +1}
+
+    Raises:
+        ValueError: If n_spins <= 0 or n_samples <= 0
     """
+    if n_spins <= 0:
+        raise ValueError(f"n_spins must be positive, got {n_spins}")
+    if n_samples <= 0:
+        raise ValueError(f"n_samples must be positive, got {n_samples}")
+
     return jnp.where(random.uniform(key, (n_samples, n_spins)) < 0.5, -1.0, 1.0)

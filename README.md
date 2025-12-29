@@ -65,6 +65,5 @@ ParisiJax implements this recursion using `jax.lax.scan` and differentiable Gaus
 
 ## 2. Installation
 
-```
 ```bash
 pip install parisijax
