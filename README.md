@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Physics](https://img.shields.io/badge/Statistical-Physics-purple)](https://arxiv.org/abs/cond-mat/0000000)
 
-**ParisiJax** is a high-performance, fully differentiable library for solving the **Sherrington-Kirkpatrick (SK)** model and other mean-field spin glasses. It bridges the gap between the infinite-*N* theoretical limit (Parisi Formula) and finite-*N* reality (Monte Carlo simulations).
+**ParisiJax** is a high-performance, fully differentiable library for solving the **Sherrington-Kirkpatrick (SK)** model and other mean-field spin glasses. It connects the infinite-*N* theoretical limit (Parisi Formula) to finite-*N* reality (Monte Carlo simulations).
 
 By leveraging JAX, this library allows researchers to:
 1.  **Solve the Parisi PDE** numerically via auto-differentiable *k*-step Replica Symmetry Breaking (*k*-RSB).
