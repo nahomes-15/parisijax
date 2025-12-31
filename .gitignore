@@ -45,6 +45,7 @@ results/
 experiments/outputs/
 *.png
 *.pdf
+*.gif
 *.npz
 *.h5
 

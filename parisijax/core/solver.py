@@ -19,6 +19,9 @@ from jax.typing import ArrayLike
 # Numerical Integration
 # ============================================================================
 
+# Cache for quadrature nodes/weights (avoid recomputation)
+_QUAD_CACHE = {}
+
 @partial(jit, static_argnums=0)
 def _gauss_hermite_quadrature(n_points: int = 32) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Gauss-Hermite quadrature for ∫ f(z) 𝒩(z|0,1) dz.
@@ -26,10 +29,12 @@ def _gauss_hermite_quadrature(n_points: int = 32) -> Tuple[jnp.ndarray, jnp.ndar
     Returns:
         (points, weights): z values and normalized weights summing to 1
     """
-    z, w = np.polynomial.hermite.hermgauss(n_points)
-    z = jnp.array(z) * jnp.sqrt(2.0)  # Scale to N(0,1)
-    w = jnp.array(w) / jnp.sqrt(jnp.pi)  # Normalize
-    return z, w
+    if n_points not in _QUAD_CACHE:
+        z, w = np.polynomial.hermite.hermgauss(n_points)
+        z = jnp.array(z) * jnp.sqrt(2.0)  # Scale to N(0,1)
+        w = jnp.array(w) / jnp.sqrt(jnp.pi)  # Normalize
+        _QUAD_CACHE[n_points] = (z, w)
+    return _QUAD_CACHE[n_points]
 
 
 # ============================================================================
@@ -55,15 +60,7 @@ def _rs_order_parameter(
 
     Returns:
         RS order parameter q ∈ [0, 1]
-
-    Raises:
-        ValueError: If beta <= 0 or n_quad <= 0
     """
-    if beta <= 0:
-        raise ValueError(f"beta must be positive, got {beta}")
-    if n_quad <= 0:
-        raise ValueError(f"n_quad must be positive, got {n_quad}")
-
     z, w = _gauss_hermite_quadrature(n_quad)
 
     def fixed_point_iter(carry, _):
@@ -385,11 +382,5 @@ def high_temp_free_energy(beta: float) -> float:
 
     Args:
         beta: Inverse temperature (must be > 0)
-
-    Raises:
-        ValueError: If beta <= 0
     """
-    if beta <= 0:
-        raise ValueError(f"beta must be positive, got {beta}")
-
     return -jnp.log(2.0) / beta - beta / 4.0
