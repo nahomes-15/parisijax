@@ -1,8 +1,7 @@
 """Animation and plotting utilities."""
 
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -84,6 +83,7 @@ def animate_rsb_transition(J, beta_range, n_frames=50, n_samples=500, n_steps=20
         anim: Matplotlib animation object
     """
     import jax
+
     from parisijax.analysis.overlap import sample_overlap_distribution
 
     beta_min, beta_max = beta_range

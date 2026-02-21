@@ -1,10 +1,9 @@
 """Sherrington-Kirkpatrick Hamiltonian: H = -(1/√N) Σᵢⱼ Jᵢⱼ σᵢσⱼ - h Σᵢ σᵢ"""
 
 from functools import partial
-from typing import Tuple
 
 import jax.numpy as jnp
-from jax import random, jit, vmap
+from jax import jit, random
 from jax.typing import ArrayLike
 
 

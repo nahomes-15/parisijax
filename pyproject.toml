@@ -1,22 +1,72 @@
 [build-system]
 requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_system"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "parisijax"
 version = "0.1.0"
 description = "JAX implementation of the Parisi RSB solution for spin glasses"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    { name = "Nahom Seyoum" },
+]
+keywords = [
+    "spin-glass",
+    "statistical-physics",
+    "jax",
+    "parisi",
+    "replica-symmetry-breaking",
+    "monte-carlo",
+    "sherrington-kirkpatrick",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "jax>=0.4.0",
     "jaxlib>=0.4.0",
     "optax>=0.1.7",
     "matplotlib>=3.5.0",
     "numpy>=1.22.0",
+    "scipy>=1.9.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "jupyter>=1.0.0",
+    "ruff>=0.1.0",
 ]
+gpu = [
+    "jax[cuda12]>=0.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nahomes-15/parisijax"
+Repository = "https://github.com/nahomes-15/parisijax"
+Issues = "https://github.com/nahomes-15/parisijax/issues"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: tests that take >30s",
+    "validation: tests against known analytical results",
+]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["examples/*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

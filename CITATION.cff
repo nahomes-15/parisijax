@@ -6,4 +6,5 @@ authors:
 title: "ParisiJAX: GPU-Accelerated Spin Glass Physics"
 version: 0.1.0
 date-released: 2025-12-28
-url: "https://github.com/yourusername/parisijax"
+url: "https://github.com/nahomes-15/parisijax"
+license: MIT
