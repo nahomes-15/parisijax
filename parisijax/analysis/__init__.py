@@ -1,5 +1,5 @@
 """Analysis tools for spin glass systems."""
 
-from parisijax.analysis import overlap, scaling
+from parisijax.analysis import overlap, research, scaling
 
-__all__ = ["overlap", "scaling"]
+__all__ = ["overlap", "research", "scaling"]
